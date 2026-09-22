@@ -303,6 +303,18 @@
   .groupwhen{ color:var(--coral); font-size:0.88rem; font-family:var(--display); }
   .grouplist{ margin:0; padding-left:18px; color:var(--ink-soft); font-size:0.92rem; }
   .grouplist li{ margin-bottom:3px; }
+
+  table.standtable{ width:100%; border-collapse:collapse; font-size:0.86rem; margin-top:4px; }
+  table.standtable th{
+    text-align:left; font-family:var(--display); font-weight:500; font-size:0.68rem;
+    text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-soft);
+    padding:6px 8px; border-bottom:1px solid var(--line);
+  }
+  table.standtable td{ padding:7px 8px; border-bottom:1px solid var(--line); color:var(--ink); }
+  table.standtable td.pos{ color:var(--ink-soft); font-family:var(--display); }
+  table.standtable tr.qualified{ background:rgba(226,114,91,0.14); }
+  table.standtable tr.qualified td.pos{ color:var(--coral); font-weight:700; }
+  table.standtable tr.qualified td:nth-child(2){ color:#FFFFFF; font-weight:600; }
 </style>
 </head>
 <body>
@@ -460,19 +472,49 @@ renderKO(DIA5, 'dia5-table');
 
 function norm(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 
+function computeStandings(g){
+  const members = GRUPOS_MIEMBROS[g];
+  const stats = {};
+  members.forEach(n => { stats[n] = {name:n, pj:0, pg:0, pf:0, pc:0}; });
+  const groupMatches = GRUPOS.filter(m => m.grupo === g && m.r1 !== null && m.r1 !== undefined);
+  groupMatches.forEach(m => {
+    if (!(m.p1 in stats) || !(m.p2 in stats)) return;
+    stats[m.p1].pj++; stats[m.p2].pj++;
+    stats[m.p1].pf += m.r1; stats[m.p1].pc += m.r2;
+    stats[m.p2].pf += m.r2; stats[m.p2].pc += m.r1;
+    if (m.r1 > m.r2) stats[m.p1].pg++; else if (m.r2 > m.r1) stats[m.p2].pg++;
+  });
+  const list = Object.values(stats);
+  const jugados = list.reduce((a,x) => a + x.pj, 0);
+  list.sort((a,b) => (b.pg - a.pg) || ((b.pf-b.pc) - (a.pf-a.pc)) || (b.pf - a.pf));
+  return { list, jugados, total: members.length * 3 };
+}
+
 function renderGroupsList(){
   const order = Object.keys(GRUPOS_MIEMBROS).sort();
   const container = document.getElementById('groups-list');
   let html = '';
   order.forEach(g => {
     const info = GRUPO_DIA[g] || {};
+    const { list, jugados, total } = computeStandings(g);
     html += `<div class="groupcard">
       <div class="groupcard-head">
         <span class="grouplabel">Grupo ${g}</span>
         <span class="groupwhen">${info.dia || ''} · ${info.fecha || ''}</span>
-      </div>
-      <ul class="grouplist">${GRUPOS_MIEMBROS[g].map(n => `<li>${n}</li>`).join('')}</ul>
-    </div>`;
+      </div>`;
+    if (jugados === 0) {
+      html += `<ul class="grouplist">${list.map(x => `<li>${x.name}</li>`).join('')}</ul>`;
+    } else {
+      html += `<table class="standtable"><thead><tr><th></th><th>Pareja</th><th>PJ</th><th>PG</th><th>Dif</th><th>PF</th></tr></thead><tbody>`;
+      list.forEach((x, i) => {
+        const cls = i < 2 ? 'qualified' : '';
+        const dif = x.pf - x.pc;
+        html += `<tr class="${cls}"><td class="pos">${i+1}º</td><td>${x.name}</td><td>${x.pj}</td><td>${x.pg}</td><td>${dif>0?'+':''}${dif}</td><td>${x.pf}</td></tr>`;
+      });
+      html += `</tbody></table>`;
+      if (jugados < total) html += `<p class="pending" style="font-size:0.82rem;margin-top:8px;">Clasificación provisional — quedan partidos por jugar.</p>`;
+    }
+    html += `</div>`;
   });
   container.innerHTML = html;
 }
